@@ -1,4 +1,4 @@
-#smartPot
+# smartPot
 ## smartPot is a comprehensive potted plant management application. The application is built using Plotly Dash.
 
 ### Description
