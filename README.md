@@ -9,6 +9,7 @@ The application utilizes sensors that monitor the environment of your potted pla
 To get started from the command line:
 ```ruby
 git clone https://github.com/adler-sudo/smartPot.git
+cd smartPot
 pip install -r requirements.txt
 python index.py
 ```
