@@ -2,7 +2,7 @@
 
 ### Description
 The application utilizes sensors that monitor the environment of your potted plant, including temperature, humidity, and soil moisture. Triggered actions will include watering and sending alerts to the plant-parent. The end goal of the application is to build an application that collects and processes data, then, triggers actions based on the incoming data.
-\
+
 
 ### Getting started:
 To get started from the command line:
