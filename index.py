@@ -5,16 +5,45 @@ import dash_table as dt
 import pandas as pd
 import plotly.express as px
 import json
+import sqlite3
 
-from app import app
+from app import app, db
+
+
+server = app.server
+
+
+# define database models ( will be moved to models.py once we get this working)
+class Environment(db.Model):
+	id = db.Column(db.Integer, primary_key=True)
+	timestamp = db.Column(db.DateTime)
+	temperature = db.Column(db.Float)
+	humidity = db.Column(db.Float)
+
+	def __repr__(self):
+		return '<Temperature {}>'.format(self.temperature)
+
+
+# intermediate step in our transition from csv to db (will go away once we clean
+# this up a bit)
+conn = sqlite3.connect('smartPot.db')
+sql = "SELECT * FROM environment"
+df = pd.read_sql(sql, con=conn, parse_dates=['timestamp'])
+
+
+
+
+
+
 
 
 # OBJECTS
 
-# dataframes
-df = pd.read_csv('data/tempData.csv', parse_dates=['timestamp'])
+# dataframes (going away for now as we make the transition to database) (DOES SEEM TO BE WORKING)
+# df = pd.read_csv('/home/pi/secondDashing/data/tempData.csv', parse_dates=['timestamp'])
+df.sort_values('timestamp', inplace=True)
 
-# temperature dataframes
+# temperature dataframes (commenting out for now to see if we can work just from callback)
 dft = df[['timestamp', 'temperature']]
 temp_mean = round(dft.temperature.mean(), 1)
 temp_high = dft.temperature.max()
@@ -42,47 +71,6 @@ hum_stats = {
 }
 
 dfhs = pd.DataFrame(data=hum_stats)
-
-
-# figures
-# temperature figures
-figt = px.scatter(df,
-                  x="timestamp",
-                  y="temperature",
-                  color="temperature",
-                  title="Temperature by time",
-                  color_continuous_scale='Reds'
-                  )
-
-figt.update_layout(
-    {'plot_bgcolor': 'rgba(0,0,0,0)'},
-    font=dict(
-        family="Verdana",
-        size=14,
-        color='black',
-    ),
-    coloraxis_showscale=False
-)
-
-# humidity figures
-figh = px.scatter(df,
-                  x="timestamp",
-                  y="humidity",
-                  color="humidity",
-                  title="Humidity by time",
-                  color_continuous_scale='Blues'
-                  )
-
-figh.update_layout(
-    {'plot_bgcolor': 'rgba(0,0,0,0)'},
-    font=dict(
-        family="verdana",
-        size=14,
-        color='black'
-    ),
-    coloraxis_showscale=False
-)
-
 
 
 # application layout
@@ -159,9 +147,12 @@ app.layout = html.Div(
 
                         dcc.Graph(
                             id="temperature-graph",
-                            figure=figt
                         ),
-
+                        dcc.Interval(
+                            id='temperature-interval',
+                            interval= 5*60*1000, # 5 minutes by 60 seconds by 1000 millisecons
+                            n_intervals=0
+                        ), 
                         dt.DataTable(
                             id="temperature-raw-data",
                             style_header={
@@ -182,7 +173,6 @@ app.layout = html.Div(
                             },
                             fixed_rows={'headers': True},
                             columns=[{"name": i, "id": i} for i in dft.columns],
-                            data=dft.to_dict('records')
                         )
                     ],
                 ),
@@ -228,7 +218,6 @@ app.layout = html.Div(
 
                         dcc.Graph(
                             id="humidity-graph",
-                            figure=figh
                         ),
 
                         dt.DataTable(
@@ -251,92 +240,50 @@ app.layout = html.Div(
                             },
                             fixed_rows={'headers': True},
                             columns=[{"name": i, "id": i} for i in dfh.columns],
-                            data=dfh.to_dict('records')
                         )
                     ]
                 )
                 ]
-        )
+        ),
+        html.Div(
+	    id='intermediate-value',
+            style={'display': 'none'}
+       )
     ]
 )
 
 
 
-# CALLBACKS
-# update temperature raw data table when zoom in on graph
+# testing the interval dcc component
+# will transition this into the other callbacks once we  confirm functionality
 @app.callback(
-    [Output('temperature-raw-data', 'data'),
-     Output('temperature-summary-table', 'data')],
-    [Input('temperature-graph', 'relayoutData')])
-def temperature_table_adjust(relayoutData):
-    try:
-        dft_copy = dft.copy()
+    [Output('intermediate-value', 'children'),
+     Output('temperature-raw-data', 'data'),
+     Output('temperature-graph', 'figure'),
+     Output('humidity-raw-data', 'data'),
+     Output('humidity-graph', 'figure')],
+    Input('temperature-interval', 'n_intervals'))
+def update_data(n):
+    # read in up to date data
+    conn = sqlite3.connect('smartPot.db')
+    sql = "SELECT * FROM environment"
+    df = pd.read_sql(sql, con=conn, parse_dates=['timestamp'])
 
-        xmin = relayoutData['xaxis.range[0]']
-        xmax = relayoutData['xaxis.range[1]']
+    # prep hidden dataset
+    datasets = {
+        'df': df.to_json(orient='split', date_format='iso')
+    }
 
-        mask = (dft_copy['timestamp'] > xmin) & (dft_copy['timestamp'] < xmax)
+    # dataframes
+    dft = df[['timestamp', 'temperature']]
+    dfh = df[['timestamp', 'humidity']]
 
-        dft_copy = dft_copy.loc[mask]
-
-    except (TypeError, KeyError):
-        dft_copy = dft.copy()
-
-    data = dft_copy.to_dict('records')
-
-    # may make more sense in future to split this up into its own callback?
-    temp_mean = round(dft_copy.temperature.mean(), 1)
-    temp_high = dft_copy.temperature.max()
-    temp_low = dft_copy.temperature.min()
-
-    temp_stats_copy = temp_stats.copy()
-
-    temp_stats_copy['Average'] = [temp_mean]
-    temp_stats_copy['High'] = [temp_high]
-    temp_stats_copy['Low'] = [temp_low]
-
-    data_sums_pd = pd.DataFrame(data=temp_stats_copy)
-    data_sums = data_sums_pd.to_dict('records')
-
-    return data, data_sums
+    # figures
+    figt = px.scatter(dft, x='timestamp', y='temperature')
+    figh = px.scatter(dfh, x='timestamp', y='humidity')
 
 
-# update temperature raw data table when zoom in on graph
-@app.callback(
-    [Output('humidity-raw-data', 'data'),
-    Output('humidity-summary-table', 'data')],
-    [Input('humidity-graph', 'relayoutData')])
-def humidity_table_adjust(relayoutData):
-    try:
-        dfh_copy = dfh.copy()
-
-        xmin = relayoutData['xaxis.range[0]']
-        xmax = relayoutData['xaxis.range[1]']
-
-        mask = (dfh_copy['timestamp'] > xmin) & (dfh_copy['timestamp'] < xmax)
-
-        dfh_copy = dfh_copy.loc[mask]
-
-    except (TypeError, KeyError):
-        dfh_copy = dfh.copy()
-
-    data = dfh_copy.to_dict('records')
-
-    # may make more sense in future to split this up into its own callback?
-    hum_mean = round(dfh_copy.humidity.mean(), 1)
-    hum_high = dfh_copy.humidity.max()
-    hum_low = dfh_copy.humidity.min()
-
-    hum_stats_copy = hum_stats.copy()
-
-    hum_stats_copy['Average'] = [hum_mean]
-    hum_stats_copy['High'] = [hum_high]
-    hum_stats_copy['Low'] = [hum_low]
-
-    data_sums_pd = pd.DataFrame(data=hum_stats_copy)
-    data_sums = data_sums_pd.to_dict('records')
-
-    return data, data_sums
+    return json.dumps(datasets), dft.to_dict('records'), figt, dfh.to_dict('records'), figh
 
 
 
@@ -346,8 +293,7 @@ def humidity_table_adjust(relayoutData):
 
 
 
-
-# host on local network at 10.0.0.96:8050
+# host on local network at <server IP>:8050
 if __name__ == '__main__':
     app.run_server(host='0.0.0.0', debug=False)
 
