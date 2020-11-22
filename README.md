@@ -17,6 +17,8 @@ python index.py
 Then, point your web browser to the address returned in the command line. This is usually something like: 127.0.0.1:8050
 
 ### Current state and future plans:
-The application is still in early stages of development. The data is currently being pulled from a .csv file where data was collected at 5 minute intervals over the course of a couple weeks using dht sensors connected to a Raspberry Pi. Ultimately, this data will be collected to a database and will be served live to your smartPot application. 
+The application has been updated to read to and pull from a sqlite db file. Readings are made from the dht11 sensory every 5 minutes. I have updated the application interface to a cleaner dash format and added dcc.Interval functionality to automatically update the data every 5 minutes from the database file. This provides a live interface to display temperature and humidity of your environment.
+
+The next phase is going to be integration of the soil moisture sensor to the Raspberry Pi. We've purchased an explorer hat to integrate this sensor and, soon, the water pump to provide automatic watering functionality to the plant. We hope to have these new features ready to go here shortly.
 
 Stay tuned and enjoy!
